@@ -9,8 +9,14 @@
 #include "HyperionConfig.h"
 #include <commandline/Parser.h>
 
+#ifdef ENABLE_MDNS
+// mDNS discover
+#include <mdns/MdnsBrowser.h>
+#include <mdns/MdnsServiceRegister.h>
+#else
 // ssdp discover
 #include <ssdp/SSDPDiscover.h>
+#endif
 #include <utils/NetUtils.h>
 
 #include <utils/DefaultSignalHandler.h>
@@ -44,7 +50,7 @@ int main(int argc, char ** argv)
 		// create the option parser and initialize all parameters
 		Parser parser("FrameBuffer capture application for Hyperion. Will automatically search a Hyperion server if -a option isn't used. Please note that if you have more than one server running it's more or less random which one will be used.");
 
-		Option         & argDevice			= parser.add<Option>       ('d', "device",         "Set the framebuffer device [default: %1]", "/dev/fb0");
+		IntOption      & argDeviceIdx		= parser.add<IntOption>    ('d', "deviceIdx",      "Set the framebuffer device index [default: %1]", 0);
 
 		IntOption      & argFps             = parser.add<IntOption>    ('f', "framerate",      QString("Capture frame rate. Range %1-%2fps").arg(GrabberWrapper::DEFAULT_MIN_GRAB_RATE_HZ).arg(GrabberWrapper::DEFAULT_MAX_GRAB_RATE_HZ), QString::number(GrabberWrapper::DEFAULT_RATE_HZ), GrabberWrapper::DEFAULT_MIN_GRAB_RATE_HZ, GrabberWrapper::DEFAULT_MAX_GRAB_RATE_HZ);
 		IntOption      & argSizeDecimation	= parser.add<IntOption>    ('s', "size-decimator", "Decimation factor for the output image size [default=%1]", QString::number(GrabberWrapper::DEFAULT_PIXELDECIMATION), 1);
@@ -82,7 +88,7 @@ int main(int argc, char ** argv)
 
 		FramebufferWrapper fbWrapper(
 			argFps.getInt(parser),
-			argDevice.value(parser),
+			argDeviceIdx.getInt(parser),
 			argSizeDecimation.getInt(parser),
 			argCropLeft.getInt(parser),
 			argCropRight.getInt(parser),
@@ -114,26 +120,33 @@ int main(int argc, char ** argv)
 		}
 		else
 		{
-			// server searching by ssdp
-			QString address = argAddress.value(parser);
-			if(address == "127.0.0.1" || address == "127.0.0.1:19400")
-			{
-				SSDPDiscover discover;
-				address = discover.getFirstService(searchType::STY_FLATBUFSERVER);
-				if(address.isEmpty())
-				{
-					address = argAddress.value(parser);
-				}
-			}
-
-			// Resolve hostname and port (or use default port)
 			QString host;
-			quint16 port{ FLATBUFFER_DEFAULT_PORT };
+			QString serviceName{ QHostInfo::localHostName() };
+			int port{ FLATBUFFER_DEFAULT_PORT };
 
-			if (!NetUtils::resolveHostPort(address, host, port))
+			// Split hostname and port (or use default port)
+			QString givenAddress = argAddress.value(parser);
+			if (!NetUtils::resolveHostPort(givenAddress, host, port))
 			{
-				throw std::runtime_error(QString("Wrong address: unable to parse address (%1)").arg(address).toStdString());
+				throw std::runtime_error(QString("Wrong address: unable to parse address (%1)").arg(givenAddress).toStdString());
 			}
+
+			// Search available Hyperion services via mDNS, if default/localhost IP is given
+			if (host == "127.0.0.1" || host == "::1")
+			{
+#ifndef ENABLE_MDNS
+				SSDPDiscover discover;
+				host = discover.getFirstService(searchType::STY_FLATBUFSERVER);
+#endif
+				QHostAddress address;
+				if (!NetUtils::resolveHostToAddress(log, host, address, port))
+				{
+					throw std::runtime_error(QString("Address could not be resolved for hostname: %2").arg(QSTRING_CSTR(host)).toStdString());
+				}
+				host = address.toString();
+			}
+
+			Info(log, "Connecting to Hyperion host: %s, port: %u using service: %s", QSTRING_CSTR(host), port, QSTRING_CSTR(serviceName));
 
 			// Create the Flabuf-connection
 			FlatBufferConnection flatbuf("Framebuffer Standalone", host, argPriority.getInt(parser), parser.isSet(argSkipReply), port);
@@ -154,5 +167,8 @@ int main(int argc, char ** argv)
 		Error(log, "%s", e.what());
 		return -1;
 	}
+
+	Logger::deleteInstance();
+
 	return 0;
 }

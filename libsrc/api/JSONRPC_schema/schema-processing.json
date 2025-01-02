@@ -7,12 +7,18 @@
 			"required" : true,
 			"enum" : ["processing"]
 		},
+		"instance" : {
+			"type": "array",
+			"required": false,
+			"items" : {},
+			"minItems": 1
+		},
 		"tan" : {
 			"type" : "integer"
 		},
 		"mappingType": {
 			"type" : "string",
-			"enum" : ["multicolor_mean", "unicolor_mean"]
+			"enum" : ["multicolor_mean", "unicolor_mean", "multicolor_mean_squared", "dominant_color", "dominant_color_advanced"]
 		}
 	},
 	"additionalProperties": false

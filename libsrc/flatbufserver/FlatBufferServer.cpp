@@ -6,15 +6,17 @@
 #include <utils/NetOrigin.h>
 #include <utils/GlobalSignals.h>
 
-// bonjour
-#ifdef ENABLE_AVAHI
-#include <bonjour/bonjourserviceregister.h>
-#endif
-
 // qt
 #include <QJsonObject>
 #include <QTcpServer>
 #include <QTcpSocket>
+
+// Constants
+namespace {
+
+const char SERVICE_TYPE[] = "flatbuffer";
+
+} //End of constants
 
 FlatBufferServer::FlatBufferServer(const QJsonDocument& config, QObject* parent)
 	: QObject(parent)
@@ -60,6 +62,12 @@ void FlatBufferServer::handleSettingsUpdate(settings::type type, const QJsonDocu
 		_timeout = obj["timeout"].toInt(5000);
 		// enable check
 		obj["enable"].toBool(true) ? startServer() : stopServer();
+
+		_pixelDecimation = obj["pixelDecimation"].toInt(1);
+		for (const auto& client : _openConnections)
+		{
+			client->setPixelDecimation(_pixelDecimation);
+		}
 	}
 }
 
@@ -73,12 +81,16 @@ void FlatBufferServer::newConnection()
 			{
 				Debug(_log, "New connection from %s", QSTRING_CSTR(socket->peerAddress().toString()));
 				FlatBufferClient *client = new FlatBufferClient(socket, _timeout, this);
+
+				client->setPixelDecimation(_pixelDecimation);
+
 				// internal
 				connect(client, &FlatBufferClient::clientDisconnected, this, &FlatBufferServer::clientDisconnected);
 				connect(client, &FlatBufferClient::registerGlobalInput, GlobalSignals::getInstance(), &GlobalSignals::registerGlobalInput);
 				connect(client, &FlatBufferClient::clearGlobalInput, GlobalSignals::getInstance(), &GlobalSignals::clearGlobalInput);
 				connect(client, &FlatBufferClient::setGlobalInputImage, GlobalSignals::getInstance(), &GlobalSignals::setGlobalImage);
 				connect(client, &FlatBufferClient::setGlobalInputColor, GlobalSignals::getInstance(), &GlobalSignals::setGlobalColor);
+				connect(client, &FlatBufferClient::setBufferImage, GlobalSignals::getInstance(), &GlobalSignals::setBufferImage);
 				connect(GlobalSignals::getInstance(), &GlobalSignals::globalRegRequired, client, &FlatBufferClient::registationRequired);
 				_openConnections.append(client);
 			}
@@ -106,19 +118,8 @@ void FlatBufferServer::startServer()
 		else
 		{
 			Info(_log,"Started on port %d", _port);
-#ifdef ENABLE_AVAHI
-			if(_serviceRegister == nullptr)
-			{
-				_serviceRegister = new BonjourServiceRegister(this);
-				_serviceRegister->registerService("_hyperiond-flatbuf._tcp", _port);
-			}
-			else if(_serviceRegister->getPort() != _port)
-			{
-				delete _serviceRegister;
-				_serviceRegister = new BonjourServiceRegister(this);
-				_serviceRegister->registerService("_hyperiond-flatbuf._tcp", _port);
-			}
-#endif
+
+			emit publishService(SERVICE_TYPE, _port);
 		}
 	}
 }
@@ -133,6 +134,6 @@ void FlatBufferServer::stopServer()
 			client->forceClose();
 		}
 		_server->close();
-		Info(_log, "Stopped");
+		Info(_log, "FlatBuffer-Server stopped");
 	}
 }

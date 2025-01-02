@@ -2,7 +2,7 @@
 // QT includes
 #include <QTimer>
 
-#include <grabber/DispmanxFrameGrabber.h>
+#include <grabber/dispmanx/DispmanxFrameGrabber.h>
 #include <hyperion/GrabberWrapper.h>
 
 class DispmanxWrapper : public QObject
@@ -16,6 +16,8 @@ public:
 					 );
 
 	const Image<ColorRgb> & getScreenshot();
+
+	bool open();
 
 	///
 	/// Starts the timed capturing of screenshots

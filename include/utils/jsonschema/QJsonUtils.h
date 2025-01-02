@@ -11,7 +11,7 @@ class QJsonUtils
 {
 public:
 
-	static void modify(QJsonObject& value, QStringList path, const QJsonValue& newValue = QJsonValue::Null, QString propertyName = "")
+	static void modify(QJsonValue& value, QStringList path, const QJsonValue& newValue = QJsonValue::Null, QString propertyName = "")
 	{
 		QJsonObject result;
 
@@ -27,7 +27,7 @@ public:
 					*it = current.mid(1, current.size()-1);
 			}
 
-			if (!value.isEmpty())
+			if (! (value.toObject().isEmpty() && value.toArray().isEmpty()) )
 				modifyValue(value, result, path, newValue, propertyName);
 			else if (newValue != QJsonValue::Null && !propertyName.isEmpty())
 				result[propertyName] = newValue;
@@ -57,7 +57,9 @@ public:
 				break;
 			}
 			case QJsonValue::Object:
-				ret = getDefaultValue(value.toObject().find("default").value());
+			{
+				ret = getDefaultValue(value.toObject().value("default"));
+			}
 				break;
 			case QJsonValue::Bool:
 				return value.toBool() ? "True" : "False";
@@ -174,9 +176,9 @@ private:
 
 							if (!path.isEmpty())
 							{
-								QJsonObject obj;
-								modifyValue(subValue, obj, path, newValue, property);
-								subValue = obj;
+								QJsonObject tempObj;
+								modifyValue(subValue, tempObj, path, newValue, property);
+								subValue = tempObj;
 							}
 							else if (newValue != QJsonValue::Null)
 								subValue = newValue;
