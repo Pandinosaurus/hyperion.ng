@@ -7,6 +7,12 @@
 			"required" : true,
 			"enum" : ["adjustment"]
 		},
+		"instance" : {
+			"type": "array",
+			"required": false,
+			"items" : {},
+			"minItems": 1
+		},
 		"tan" : {
 			"type" : "integer"
 		},
@@ -134,6 +140,25 @@
 					"required" : false,
 					"minimum" : 0,
 					"maximum" : 100
+				},
+				"saturationGain" : {
+					"type" : "number",
+					"required" : false,
+					"minimum" : 0.0,
+					"maximum": 10.0
+				},
+				"brightnessGain" : {
+					"type" : "number",
+					"required" : false,
+					"minimum" : 0.1,
+					"maximum": 10.0
+				},
+				"temperature" :
+				{
+					"type" : "integer",
+					"required" : false,
+					"minimum" : 1000,
+					"maximum": 40000
 				}
 			},
 			"additionalProperties": false

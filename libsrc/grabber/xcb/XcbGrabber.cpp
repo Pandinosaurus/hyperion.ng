@@ -1,5 +1,5 @@
 #include <utils/Logger.h>
-#include <grabber/XcbGrabber.h>
+#include <grabber/xcb/XcbGrabber.h>
 
 #include "XcbCommands.h"
 #include "XcbCommandExecutor.h"
@@ -18,7 +18,7 @@ namespace {
 #define DOUBLE_TO_FIXED(d) ((xcb_render_fixed_t) ((d) * 65536))
 
 XcbGrabber::XcbGrabber(int cropLeft, int cropRight, int cropTop, int cropBottom)
-	: Grabber("XCBGRABBER", cropLeft, cropRight, cropTop, cropBottom)
+	: Grabber("GRABBER-XCB", cropLeft, cropRight, cropTop, cropBottom)
 	, _connection{}
 	, _screen{}
 	, _pixmap{}
@@ -41,8 +41,6 @@ XcbGrabber::XcbGrabber(int cropLeft, int cropRight, int cropTop, int cropBottom)
 	, _shmData{}
 	, _XcbRandREventBase{-1}
 {
-	_logger = Logger::getInstance("XCB");
-
 	// cropping is performed by XcbRender, XcbShmGetImage or XcbGetImage
 	_useImageResampler = false;
 	_imageResampler.setCropping(0, 0, 0, 0);
@@ -242,12 +240,12 @@ bool XcbGrabber::setupDisplay()
 		setupRender();
 		setupShm();
 
-		Info(_log, QString("XcbRandR=[%1] XcbRender=[%2] XcbShm=[%3] XcbPixmap=[%4]")
-			 .arg(_XcbRandRAvailable     ? "available" : "unavailable")
-			 .arg(_XcbRenderAvailable    ? "available" : "unavailable")
-			 .arg(_XcbShmAvailable       ? "available" : "unavailable")
-			 .arg(_XcbShmPixmapAvailable ? "available" : "unavailable")
-			 .toStdString().c_str());
+		Info(_log, "%s", QSTRING_CSTR(QString("XcbRandR=[%1] XcbRender=[%2] XcbShm=[%3] XcbPixmap=[%4]")
+			 .arg(_XcbRandRAvailable ? "available" : "unavailable",
+			 _XcbRenderAvailable     ? "available" : "unavailable",
+			 _XcbShmAvailable        ? "available" : "unavailable",
+			 _XcbShmPixmapAvailable  ? "available" : "unavailable"))
+			 );
 
 		result = (updateScreenDimensions(true) >= 0);
 		ErrorIf(!result, _log, "XCB Grabber start failed");

@@ -6,7 +6,7 @@ description: |
   It supports many LED devices and video grabbers.
 
 license: MIT
-icon: resources/icons/hyperion-icon-512px.png
+icon: resources/icons/hyperion-512px.png
 adopt-info: hyperion-ng
 architectures:
   - build-on: amd64
@@ -45,6 +45,7 @@ parts:
       - libavahi-core-dev
       - libavahi-compat-libdnssd-dev
       - libturbojpeg0-dev
+      - libjpeg-dev
       - libssl-dev
     stage-packages:
       - libfontconfig1
@@ -58,7 +59,7 @@ parts:
 apps:
   hyperion-ng:
     command: usr/local/bin/hyperiond
-    desktop: usr/local/share/hyperion/desktop/hyperiond.desktop
+    desktop: /usr/share/applications/hyperion.desktop
     plugs:
       - camera
       - framebuffer

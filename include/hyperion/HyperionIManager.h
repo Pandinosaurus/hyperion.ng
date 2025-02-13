@@ -5,6 +5,7 @@
 #include <utils/VideoMode.h>
 #include <utils/settings.h>
 #include <utils/Components.h>
+#include <events/EventEnum.h>
 
 // qt
 #include <QMap>
@@ -54,9 +55,21 @@ public slots:
 	Hyperion* getHyperionInstance(quint8 instance = 0);
 
 	///
-	/// @brief Get instance data of all instaces in db + running state
+	/// @brief Get instance data of all instances in db + running state
 	///
 	QVector<QVariantMap> getInstanceData() const;
+
+	QString getInstanceName(quint8 inst = 0);
+
+	///
+	/// @brief Get all instance indicies of running instances
+	///
+	QList<quint8> getRunningInstanceIdx() const;
+
+	///
+	/// @brief Get all instance indicies configured
+	///
+	QList<quint8> getInstanceIds() const;
 
 	///
 	/// @brief Start a Hyperion instance
@@ -74,10 +87,16 @@ public slots:
 	bool stopInstance(quint8 inst);
 
 	///
-	/// @brief Toggle the state of all Hyperion instances
-	/// @param pause If true all instances toggle to pause, else to resume
+	/// @brief Handle an Hyperion Event
+	/// @param event Event to be processed
 	///
-	void toggleStateAllInstances(bool pause = false);
+	void handleEvent(Event event);
+
+	///
+	/// @brief Toggle the state of all Hyperion instances
+	/// @param enable, If false all instances toggle to pause, else to resume
+	///
+	void toggleStateAllInstances(bool enable = false);
 
 	///
 	/// @brief Create a new Hyperion instance entry in db
@@ -102,8 +121,6 @@ public slots:
 	///
 	bool saveName(quint8 inst, const QString& name);
 
-	QString getRootPath() const { return _rootPath; }
-
 signals:
 	///
 	/// @brief Emits whenever the state of a instance changes according to enum instanceState
@@ -124,6 +141,7 @@ signals:
 	/// @param  tan     The tan that was part of the request
 	///
 	void startInstanceResponse(QObject *caller, const int &tan);
+
 
 signals:
 	///////////////////////////////////////
@@ -165,13 +183,24 @@ private slots:
 	///
 	void handleFinished();
 
+	///
+	/// @brief Toggle the state of all Hyperion instances for a suspend sceanrio (user is not interacting with the system)
+	/// @param isSuspend, If true all instances toggle to suspend, else to resume
+	///
+	void toggleSuspend(bool isSuspend);
+
+	///
+	/// @brief Toggle the state of all Hyperion instances for an idle sceanrio
+	/// @param isIdle, If true all instances toggle to idle, else to resume
+	///
+	void toggleIdle(bool isIdle);
+
 private:
 	friend class HyperionDaemon;
 	///
 	/// @brief Construct the Manager
-	/// @param The root path of all userdata
 	///
-	HyperionIManager(const QString& rootPath, QObject* parent = nullptr, bool readonlyMode = false);
+	HyperionIManager(QObject* parent = nullptr);
 
 	///
 	/// @brief Start all instances that are marked as enabled in db. Non blocking
@@ -192,12 +221,9 @@ private:
 private:
 	Logger* _log;
 	InstanceTable* _instanceTable;
-	const QString _rootPath;
 	QMap<quint8, Hyperion*> _runningInstances;
+
 	QList<quint8> _startQueue;
-
-	bool _readonlyMode;
-
 	/// All pending requests
 	QMap<quint8, PendingRequests> _pendingRequests;
 };

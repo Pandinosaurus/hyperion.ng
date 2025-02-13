@@ -4,7 +4,7 @@
 #include "SSDPDescription.h"
 #include <hyperion/Hyperion.h>
 #include <HyperionConfig.h>
-#include <hyperion/AuthManager.h>
+#include <db/MetaTable.h>
 
 #include <QNetworkInterface>
 #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
@@ -20,7 +20,6 @@ static const QString SSDP_IDENTIFIER("urn:hyperion-project.org:device:basic:1");
 SSDPHandler::SSDPHandler(WebServer* webserver, quint16 flatBufPort, quint16 protoBufPort, quint16 jsonServerPort, quint16 sslPort, const QString& name, QObject* parent)
 	: SSDPServer(parent)
 	, _webserver(webserver)
-	, _localAddress()
 #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 	, _NCA(nullptr)
 #endif
@@ -30,6 +29,8 @@ SSDPHandler::SSDPHandler(WebServer* webserver, quint16 flatBufPort, quint16 prot
 	setJsonServerPort(jsonServerPort);
 	setSSLServerPort(sslPort);
 	setHyperionName(name);
+
+	Debug(_log, "SSDP info service created");
 }
 
 SSDPHandler::~SSDPHandler()
@@ -39,7 +40,8 @@ SSDPHandler::~SSDPHandler()
 
 void SSDPHandler::initServer()
 {
-	_uuid = AuthManager::getInstance()->getID();
+	MetaTable metaTable;
+	_uuid = metaTable.getUUID();
 	SSDPServer::setUuid(_uuid);
 
 	// announce targets
@@ -87,6 +89,7 @@ void SSDPHandler::stopServer()
 {
 	sendAnnounceList(false);
 	SSDPServer::stop();
+	Info(_log, "SSDP info service stopped");
 }
 
 void SSDPHandler::handleSettingsUpdate(settings::type type, const QJsonDocument& config)

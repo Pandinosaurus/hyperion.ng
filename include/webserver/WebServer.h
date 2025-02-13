@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QString>
 #include <QJsonDocument>
+#include <QScopedPointer>
 
 // hyperion / utils
 #include <utils/Logger.h>
@@ -11,7 +12,6 @@
 // settings
 #include <utils/settings.h>
 
-class BonjourServiceRegister;
 class StaticFileServing;
 class QtHttpServer;
 
@@ -52,6 +52,11 @@ signals:
 	///
 	void portChanged(quint16 port);
 
+	///
+	/// @emits whenever the server would like to announce its service details
+	///
+	void publishService(const QString& serviceType, quint16 servicePort, const QByteArray& serviceName = "");
+
 public slots:
 	///
 	/// @brief Init server after thread start
@@ -60,7 +65,7 @@ public slots:
 
 	void onServerStopped      ();
 	void onServerStarted      (quint16 port);
-	void onServerError        (QString msg);
+	void onServerError        (const QString& msg);
 
 	///
 	/// @brief Handle settings update from Hyperion Settingsmanager emit or this constructor
@@ -86,15 +91,8 @@ private:
 	QString              _baseUrl;
 	quint16              _port;
 	StaticFileServing*   _staticFileServing;
-	QtHttpServer*        _server;
+	QScopedPointer<QtHttpServer> _server;
 	bool                 _inited = false;
-
-	const QString        WEBSERVER_DEFAULT_PATH	    = ":/webconfig";
-	const QString        WEBSERVER_DEFAULT_CRT_PATH = ":/hyperion.crt";
-	const QString        WEBSERVER_DEFAULT_KEY_PATH = ":/hyperion.key";
-	quint16              WEBSERVER_DEFAULT_PORT     = 8090;
-
-	BonjourServiceRegister * _serviceRegister = nullptr;
 };
 
 #endif // WEBSERVER_H

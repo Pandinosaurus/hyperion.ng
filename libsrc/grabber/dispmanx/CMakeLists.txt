@@ -1,22 +1,28 @@
 # Find the BCM-package (VC control)
-IF ( "${PLATFORM}" MATCHES rpi)
-	find_package(BCM REQUIRED)
-	include_directories(${BCM_INCLUDE_DIRS})
-ELSE()
-	SET(BCM_INCLUDE_DIRS "")
-	SET(BCM_LIBRARIES "")
-ENDIF()
+if("${PLATFORM}" MATCHES rpi)
+	find_package(BCM)
+	if(BCM_FOUND)
+		add_definitions(-DBCM_FOUND)
+	endif()
+else()
+	set(BCM_INCLUDE_DIR "")
+	set(BCM_LIBRARY "")
+endif()
 
-# Define the current source locations
-SET(CURRENT_HEADER_DIR ${CMAKE_SOURCE_DIR}/include/grabber)
-SET(CURRENT_SOURCE_DIR ${CMAKE_SOURCE_DIR}/libsrc/grabber/dispmanx)
+add_library(dispmanx-grabber
+	${CMAKE_SOURCE_DIR}/include/grabber/dispmanx/DispmanxFrameGrabber.h
+	${CMAKE_SOURCE_DIR}/include/grabber/dispmanx/DispmanxWrapper.h
+	${CMAKE_SOURCE_DIR}/libsrc/grabber/dispmanx/DispmanxFrameGrabber.cpp
+	${CMAKE_SOURCE_DIR}/libsrc/grabber/dispmanx/DispmanxWrapper.cpp
+)
 
-FILE ( GLOB DispmanxGrabberSOURCES "${CURRENT_HEADER_DIR}/Dispmanx*.h"  "${CURRENT_SOURCE_DIR}/*.h"  "${CURRENT_SOURCE_DIR}/*.cpp" )
-
-add_library(dispmanx-grabber ${DispmanxGrabberSOURCES} )
+add_definitions(-DBCM_LIBRARY="${BCM_LIBRARY}")
 
 target_link_libraries(dispmanx-grabber
 	hyperion
-	${QT_LIBRARIES}
-	${BCM_LIBRARIES}
+	${CMAKE_DL_LIBS}
+)
+
+target_include_directories(dispmanx-grabber PUBLIC
+	${BCM_INCLUDE_DIR}
 )

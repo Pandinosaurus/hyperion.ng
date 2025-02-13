@@ -1,11 +1,28 @@
-# Define the current source locations
-SET(CURRENT_HEADER_DIR ${CMAKE_SOURCE_DIR}/include/grabber)
-SET(CURRENT_SOURCE_DIR ${CMAKE_SOURCE_DIR}/libsrc/grabber/osx)
-
-FILE ( GLOB OsxGrabberSOURCES "${CURRENT_HEADER_DIR}/Osx*.h"  "${CURRENT_SOURCE_DIR}/*.h"  "${CURRENT_SOURCE_DIR}/*.cpp" )
-
-add_library(osx-grabber ${OsxGrabberSOURCES} )
+add_library(osx-grabber
+	${CMAKE_SOURCE_DIR}/include/grabber/osx/OsxFrameGrabber.h
+	${CMAKE_SOURCE_DIR}/include/grabber/osx/OsxWrapper.h
+	${CMAKE_SOURCE_DIR}/libsrc/grabber/osx/OsxFrameGrabber.mm
+	${CMAKE_SOURCE_DIR}/libsrc/grabber/osx/OsxWrapper.cpp
+)
 
 target_link_libraries(osx-grabber
 	hyperion
-	${QT_LIBRARIES})
+	"$<LINK_LIBRARY:FRAMEWORK,CoreGraphics.framework>"
+)
+
+file(WRITE ${CMAKE_BINARY_DIR}/tmp/SDK15Available.c
+	"#include <AvailabilityMacros.h>
+	#if __MAC_OS_X_VERSION_MAX_ALLOWED < 150000
+	#error __MAC_OS_X_VERSION_MAX_ALLOWED < 150000
+	#endif
+	int main(int argc, char** argv)
+	{
+		return 0;
+	}"
+)
+
+try_compile(SDK_15_AVAILABLE ${CMAKE_BINARY_DIR} SOURCES ${CMAKE_BINARY_DIR}/tmp/SDK15Available.c)
+if(SDK_15_AVAILABLE)
+	target_compile_definitions(osx-grabber PRIVATE SDK_15_AVAILABLE)
+	target_link_libraries(osx-grabber "$<LINK_LIBRARY:WEAK_FRAMEWORK,ScreenCaptureKit.framework>")
+endif()

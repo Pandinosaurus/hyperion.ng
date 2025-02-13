@@ -7,13 +7,16 @@
 			"required" : true,
 			"enum" : ["leddevice"]
 		},
+		"instance" : {
+			"type" : "integer"
+		},
 		"tan" : {
 			"type" : "integer"
 		},
 		"subcommand": {
 			"type" : "string",
 			"required" : true,
-			"enum" : ["discover","getProperties","identify"]
+			"enum": [ "discover", "getProperties", "identify", "addAuthorization" ]
 		},
 		"ledDeviceType": {
 			"type" : "string",

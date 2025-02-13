@@ -7,7 +7,6 @@
 
 // Qt includes
 #include <QNetworkAccessManager>
-#include <QEventLoop>
 #include <QNetworkReply>
 #include <QtCore/qmath.h>
 #include <QStringList>
@@ -16,31 +15,6 @@
 #include <leddevice/LedDevice.h>
 #include "ProviderRestApi.h"
 #include "ProviderUdpSSL.h"
-
-//Streaming message header and payload definition
-const uint8_t HEADER[] =
-	{
-		'H', 'u', 'e', 'S', 't', 'r', 'e', 'a', 'm', //protocol
-		0x01, 0x00, //version 1.0
-		0x01, //sequence number 1
-		0x00, 0x00, //Reserved write 0’s
-		0x01, //xy Brightness
-		0x00, // Reserved, write 0’s
-};
-
-const uint8_t PAYLOAD_PER_LIGHT[] =
-	{
-		0x01, 0x00, 0x06, //light ID
-		//color: 16 bpc
-		0xff, 0xff,
-		0xff, 0xff,
-		0xff, 0xff,
-		/*
-	(message.R >> 8) & 0xff, message.R & 0xff,
-	(message.G >> 8) & 0xff, message.G & 0xff,
-	(message.B >> 8) & 0xff, message.B & 0xff
-	*/
-};
 
 /**
  * A XY color point in the color space of the hue system without brightness.
@@ -85,7 +59,7 @@ struct CiColor
 	///
 	/// @return color point
 	///
-	static CiColor rgbToCiColor(double red, double green, double blue, const CiColorTriangle &colorSpace);
+	static CiColor rgbToCiColor(double red, double green, double blue, const CiColorTriangle& colorSpace, bool candyGamma);
 
 	///
 	/// @param p the color point to check
@@ -146,11 +120,18 @@ public:
 	/// Constructs the light.
 	///
 	/// @param log the logger
-	/// @param bridge the bridge
+	/// @param useApiV2 make use of Hue API version 2
 	/// @param id the light id
+	/// @param lightAttributes the light's attributes as provied by the Hue Bridge
+	/// @param onBlackTimeToPowerOff Timeframe of Black output that triggers powering off the light
+	/// @param onBlackTimeToPowerOn Timeframe of non Black output that triggers powering on the light
 	///
-	PhilipsHueLight(Logger* log, unsigned int id, QJsonObject values, unsigned int ledidx);
-	~PhilipsHueLight();
+	PhilipsHueLight(Logger* log, bool useApiV2, const QString& id, const QJsonObject& lightAttributes,
+					int onBlackTimeToPowerOff,
+					int onBlackTimeToPowerOn);
+
+	void setDeviceDetails(const QJsonObject& details);
+	void setEntertainmentSrvDetails(const QJsonObject& details);
 
 	///
 	/// @param on
@@ -167,40 +148,66 @@ public:
 	///
 	void setColor(const CiColor& color);
 
-	unsigned int getId() const;
+	QString getId() const;
+	QString getdeviceId() const;
+	QString getProduct() const;
+	QString getModel() const;
+	QString getName() const;
+	QString getArcheType() const;
+
+	int getMaxSegments() const;
 
 	bool getOnOffState() const;
 	int getTransitionTime() const;
 	CiColor getColor() const;
+	bool hasColor() const;
 
 	///
 	/// @return the color space of the light determined by the model id reported by the bridge.
 	CiColorTriangle getColorSpace() const;
 
 	void saveOriginalState(const QJsonObject& values);
-	QString getOriginalState() const;
+	QJsonObject getOriginalState() const;
 
+	bool isBusy();
+	bool isBlack(bool isBlack);
+	bool isWhite(bool isWhite);
+	void setBlack();
+	void blackScreenTriggered();
 private:
 
 	Logger* _log;
-	/// light id
-	unsigned int _id;
-	unsigned int _ledidx;
+	bool _useApiV2;
+
+	QString _id;
+	QString _deviceId;
+	QString _product;
+	QString _model;
+	QString _name;
+	QString _archeType;
+	QString _gamutType;
+
+	int _maxSegments;
+
 	bool _on;
 	int _transitionTime;
 	CiColor _color;
+	bool    _hasColor;
 	/// darkes blue color in hue lamp GAMUT = black
 	CiColor _colorBlack;
-	/// The model id of the hue lamp which is used to determine the color space.
-	QString _modelId;
-	QString _lightname;
 	CiColorTriangle _colorSpace;
 
 	/// The json string of the original state.
 	QJsonObject _originalStateJSON;
 
-	QString _originalState;
+	QJsonObject _originalState;
 	CiColor _originalColor;
+	qint64 _lastSendColorTime;
+	qint64 _lastBlackTime;
+	qint64 _lastWhiteTime;
+	bool _blackScreenTriggered;
+	qint64 _onBlackTimeToPowerOff;
+	qint64 _onBlackTimeToPowerOn;
 };
 
 class LedDevicePhilipsHueBridge : public ProviderUdpSSL
@@ -215,13 +222,9 @@ public:
 	///
 	/// @brief Initialise the access to the REST-API wrapper
 	///
-	/// @param[in] host
-	/// @param[in] port
-	/// @param[in] authentication token
-	///
 	/// @return True, if success
 	///
-	bool initRestAPI(const QString &hostname, int port, const QString &token );
+	bool openRestAPI();
 
 	///
 	/// @brief Perform a REST-API GET
@@ -233,25 +236,40 @@ public:
 	QJsonDocument get(const QString& route);
 
 	///
-	/// @brief Perform a REST-API POST
+	/// @brief Perform a REST-API GET
 	///
-	/// @param route the route of the POST request.
-	/// @param content the content of the POST request.
+	/// @param routeElements the route's elements of the GET request.
 	///
-	QJsonDocument post(const QString& route, const QString& content);
+	/// @return the content of the GET request.
+	///
+	QJsonDocument get(const QStringList& routeElements);
 
-	QJsonDocument getLightState(unsigned int lightId);
-	void setLightState(unsigned int lightId = 0, const QString &state = "");
+	///
+	/// @brief Perform a REST-API PUT
+	///
+	/// @param routeElements the route's elements of the PUT request.
+	/// @param content the content of the PUT request.
+	/// @param supressError Treat an error as a warning
+	///
+	/// @return the content of the PUT request.
+	///
+	QJsonDocument put(const QStringList& routeElements, const QJsonObject& content, bool supressError = false);
 
-	QMap<quint16,QJsonObject> getLightMap() const;
+	QJsonDocument retrieveBridgeDetails();
+	QJsonObject getDeviceDetails(const QString& deviceId);
+	QJsonObject getEntertainmentSrvDetails(const QString& deviceId);
 
-	QMap<quint16,QJsonObject> getGroupMap() const;
+	QJsonObject getLightDetails(const QString& lightId);
+	QJsonDocument setLightState(const QString& lightId, const QJsonObject& state);
 
-	QString getGroupName(quint16 groupId = 0) const;
+	QMap<QString,QJsonObject> getDevicesMap() const;
+	QMap<QString,QJsonObject> getLightMap() const;
+	QMap<QString,QJsonObject> getGroupMap() const;
+	QMap<QString,QJsonObject> getEntertainmentMap() const;
 
-	QJsonArray getGroupLights(quint16 groupId = 0) const;
-
-
+	QString getGroupName(const QString& groupId) const;
+	QStringList getGroupLights(const QString& groupId) const;
+	int getGroupChannelsCount(const QString& groupId) const;
 
 protected:
 
@@ -281,41 +299,119 @@ protected:
 	/// @brief Check, if Hue API response indicate error
 	///
 	/// @param[in] response from Hue-Bridge in JSON-format
+	/// @param[in] suppressError Treat an error as a warning
+	///
 	/// return True, Hue Bridge reports error
 	///
-	bool checkApiError(const QJsonDocument &response );
+	bool checkApiError(const QJsonDocument& response, bool supressError = false);
 
-	///REST-API wrapper
-	ProviderRestApi* _restApi;
+	///
+	/// @brief Discover devices of this type available (for configuration).
+	/// @note Mainly used for network devices. Allows to find devices, e.g. via ssdp, mDNS or cloud ways.
+	///
+	/// @param[in] params Parameters used to overwrite discovery default behaviour
+	///
+	/// @return A JSON structure holding a list of devices found
+	///
+	QJsonObject discover(const QJsonObject& params) override;
 
-	/// Ip address of the bridge
-	QString _hostname;
-	int _apiPort;
-	/// User name for the API ("newdeveloper")
-	QString _username;
+	///
+	/// @brief Get the Hue Bridge device's resource properties
+	///
+	/// Following parameters are required
+	/// @code
+	/// {
+	///     "host"  : "hostname or IP",
+	///     "port"  : port
+	///     "user"  : "username",
+	///     "filter": "resource to query", root "/" is used, if empty
+	/// }
+	///@endcode
+	///
+	/// @param[in] params Parameters to query device
+	/// @return A JSON structure holding the device's properties
+	///
+	QJsonObject getProperties(const QJsonObject& params) override;
 
-	bool _useHueEntertainmentAPI;
+	///
+	/// @brief Add an authorization/client-key to the Hue Bridge device
+	///
+	/// Following parameters are required
+	/// @code
+	/// {
+	///     "host"  : "hostname or IP",
+	///     "port"  : port
+	/// }
+	///@endcode
+	///
+	/// @param[in] params Parameters to query device
+	/// @return A JSON structure holding the authorization keys
+	///
+	QJsonObject addAuthorization(const QJsonObject& params) override;
 
-	QJsonDocument getGroupState( unsigned int groupId );
-	QJsonDocument setGroupState( unsigned int groupId, bool state);
+	bool isApiEntertainmentReady(const QString& apiVersion);
+	bool isAPIv2Ready (int swVersion);
+
+	int getFirmwareVerion() { return _deviceFirmwareVersion; }
+	void setBridgeDetails( const QJsonDocument &doc, bool isLogging = false );
+
+	void setBaseApiEnvironment(bool apiV2 = true, const QString& path = "");
+
+	QJsonDocument getGroupDetails( const QString& groupId );
+	QJsonDocument setGroupState( const QString& groupId, bool state);
 
 	bool isStreamOwner(const QString &streamOwner) const;
-	bool initMaps();
+
+	bool initDevicesMap();
+	bool initLightsMap();
+	bool initGroupsMap();
+	bool initEntertainmentSrvsMap();
 
 	void log(const char* msg, const char* type, ...) const;
 
+	bool configureSsl();
 	const int * getCiphersuites() const override;
+
+	///REST-API wrapper
+	ProviderRestApi* _restApi;
+	int _apiPort;
+	/// User name for the API ("newdeveloper")
+	QString _authToken;
+	QString _applicationID;
+
+	bool _useEntertainmentAPI;
+	bool _useApiV2;
+	bool _isAPIv2Ready;
+
+	bool _isDiyHue;
 
 private:
 
-	QJsonDocument getAllBridgeInfos();
-	void setBridgeConfig( const QJsonDocument &doc );
+	///
+	/// @brief Discover Philips-Hue devices available (for configuration).
+	/// Philips-Hue specific ssdp discovery
+	///
+	/// @return A JSON structure holding a list of devices found
+	///
+	QJsonArray discoverSsdp();
+
+	QJsonDocument retrieveDeviceDetails(const QString& deviceId = "");
+	QJsonDocument retrieveLightDetails(const QString& lightId = "");
+	QJsonDocument retrieveGroupDetails(const QString& groupId = "");
+	QJsonDocument retrieveEntertainmentSrvDetails(const QString& deviceId = "");
+
+	bool retrieveApplicationId();
+
+	void setDevicesMap( const QJsonDocument &doc );
 	void setLightsMap( const QJsonDocument &doc );
 	void setGroupMap( const QJsonDocument &doc );
+	void setEntertainmentSrvMap( const QJsonDocument &doc );
 
 	//Philips Hue Bridge details
+	QString _deviceName;
+	QString _deviceBridgeId;
 	QString _deviceModel;
-	QString _deviceFirmwareVersion;
+	int _deviceFirmwareVersion;
 	QString _deviceAPIVersion;
 
 	uint _api_major;
@@ -324,8 +420,12 @@ private:
 
 	bool _isHueEntertainmentReady;
 
-	QMap<quint16,QJsonObject> _lightsMap;
-	QMap<quint16,QJsonObject> _groupsMap;
+	QMap<QString,QJsonObject> _devicesMap;
+	QMap<QString,QJsonObject> _lightsMap;
+	QMap<QString,QJsonObject> _groupsMap;
+	QMap<QString,QJsonObject> _entertainmentMap;
+
+	int _lightsCount;
 };
 
 /**
@@ -361,34 +461,6 @@ public:
 	static LedDevice* construct(const QJsonObject &deviceConfig);
 
 	///
-	/// @brief Discover devices of this type available (for configuration).
-	/// @note Mainly used for network devices. Allows to find devices, e.g. via ssdp, mDNS or cloud ways.
-	///
-	/// @param[in] params Parameters used to overwrite discovery default behaviour
-	///
-	/// @return A JSON structure holding a list of devices found
-	///
-	QJsonObject discover(const QJsonObject& params) override;
-
-	///
-	/// @brief Get the Hue Bridge device's resource properties
-	///
-	/// Following parameters are required
-	/// @code
-	/// {
-	///     "host"  : "hostname or IP
-	///     "port"  : port
-	///     "user"  : "username",
-	///     "filter": "resource to query", root "/" is used, if empty
-	/// }
-	///@endcode
-	///
-	/// @param[in] params Parameters to query device
-	/// @return A JSON structure holding the device's properties
-	///
-	QJsonObject getProperties(const QJsonObject& params) override;
-
-	///
 	/// @brief Send an update to the device to identify it.
 	///
 	/// Following parameters are required
@@ -410,9 +482,9 @@ public:
 	///
 	/// @return Number of device's LEDs
 	///
-	unsigned int getLightsCount() const { return _lightsCount; }
+	int getLightsCount() const { return _lightsCount; }
 
-	void setOnOffState(PhilipsHueLight& light, bool on);
+	void setOnOffState(PhilipsHueLight& light, bool on, bool force = false);
 	void setTransitionTime(PhilipsHueLight& light);
 	void setColor(PhilipsHueLight& light, CiColor& color);
 	void setState(PhilipsHueLight& light, bool on, const CiColor& color);
@@ -444,13 +516,6 @@ protected:
 	int open() override;
 
 	///
-	/// @brief Closes the output device.
-	///
-	/// @return Zero on success (i.e. device is closed), else negative
-	///
-	int close() override;
-
-	///
 	/// @brief Writes the RGB-Color values to the LEDs.
 	///
 	/// @param[in] ledValues The RGB-color per LED
@@ -465,7 +530,7 @@ protected:
 	/// Depending on the configuration, the device may store its current state for later restore.
 	/// @see powerOn, storeState
 	///
-	/// @return True if success
+	/// @return True, if success
 	///
 	bool switchOn() override;
 
@@ -518,35 +583,24 @@ protected:
 	///
 	bool restoreState() override;
 
-private slots:
-
-	void noSignalTimeout();
-
 private:
 
 	bool initLeds();
 
-	///
-	/// @brief Creates new PhilipsHueLight(s) based on user lightid with bridge feedback
-	///
-	/// @param map Map of lightid/value pairs of bridge
-	///
-	void newLights(QMap<quint16, QJsonObject> map);
-
 	bool setLights();
 
-	/// creates new PhilipsHueLight(s) based on user lightid with bridge feedback
+	/// creates new PhilipsHueLight(s) based on user lightId with bridge feedback
 	///
-	/// @param map Map of lightid/value pairs of bridge
+	/// @param map Map of lightId/value pairs of bridge
 	///
-	bool updateLights(const QMap<quint16, QJsonObject> &map);
+	bool updateLights(const QMap<QString, QJsonObject> &map);
 
 	///
 	/// @brief Set the number of LEDs supported by the device.
 	///
 	/// @rparam[in] Number of device's LEDs
 	//
-	void setLightsCount( unsigned int lightsCount);
+	void setLightsCount(int lightsCount);
 
 	bool openStream();
 	bool getStreamGroupState();
@@ -554,14 +608,8 @@ private:
 	bool startStream();
 	bool stopStream();
 
-	void writeStream();
 	int writeSingleLights(const std::vector<ColorRgb>& ledValues);
-
-	bool noSignalDetection();
-
-	void stopBlackTimeoutTimer();
-
-	QByteArray prepareStreamData() const;
+	int writeStreamData(const std::vector<ColorRgb>& ledValues, bool flush = false);
 
 	///
 	bool _switchOffOnBlack;
@@ -574,32 +622,21 @@ private:
 	bool _isInitLeds;
 
 	/// Array of the light ids.
-	std::vector<quint16> _lightIds;
+	QStringList _lightIds;
 	/// Array to save the lamps.
 	std::vector<PhilipsHueLight> _lights;
 
-	unsigned int _lightsCount;
-	quint16 _groupId;
-
-	double _brightnessMin;
-	double _brightnessMax;
-
-	bool _allLightsBlack;
-
-	QTimer* _blackLightsTimer;
-	int _blackLightsTimeout;
-	double _brightnessThreshold;
-
-	int _handshake_timeout_min;
-	int _handshake_timeout_max;
-	int _ssl_read_timeout;
-
-	bool _stopConnection;
-
+	int _lightsCount;
+	int _channelsCount;
+	QString _groupId;
 	QString _groupName;
 	QString _streamOwner;
 
-	int start_retry_left;
-	int stop_retry_left;
+	int _blackLightsTimeout;
+	double _blackLevel;
+	int _onBlackTimeToPowerOff;
+	int	_onBlackTimeToPowerOn;
+	bool _candyGamma;
 
+	bool _groupStreamState;
 };

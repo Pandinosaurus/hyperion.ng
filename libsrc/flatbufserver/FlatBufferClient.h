@@ -6,6 +6,7 @@
 #include <utils/ColorRgb.h>
 #include <utils/ColorRgba.h>
 #include <utils/Components.h>
+#include "utils/ImageResampler.h"
 
 // flatbuffer FBS
 #include "hyperion_reply_generated.h"
@@ -33,6 +34,8 @@ public:
 	///
 	explicit FlatBufferClient(QTcpSocket* socket, int timeout, QObject *parent = nullptr);
 
+	void setPixelDecimation(int decimator);
+
 signals:
 	///
 	/// @brief forward register data to HyperionDaemon
@@ -53,6 +56,11 @@ signals:
 	/// @brief Forward requested color
 	///
 	void setGlobalInputColor(int priority, const std::vector<ColorRgb> &ledColor, int timeout_ms, const QString& origin = "FlatBuffer" ,bool clearEffects = true);
+
+	///
+	/// @brief Emit the final processed image
+	///
+	void setBufferImage(const QString& name, const Image<ColorRgb>& image);
 
 	///
 	/// @brief Emits whenever the client disconnected
@@ -133,6 +141,9 @@ private:
 	///
 	void sendErrorReply(const std::string & error);
 
+	void processRawImage(const hyperionnet::RawImageT& raw_image, int bytesPerPixel, ImageResampler& resampler, Image<ColorRgb>& outputImage);
+	void processNV12Image(const hyperionnet::NV12ImageT& nv12_image, ImageResampler& resampler, Image<ColorRgb>& outputImage);
+
 private:
 	Logger *_log;
 	QTcpSocket *_socket;
@@ -142,6 +153,8 @@ private:
 	int _priority;
 
 	QByteArray _receiveBuffer;
+
+	ImageResampler _imageResampler;
 
 	// Flatbuffers builder
 	flatbuffers::FlatBufferBuilder _builder;

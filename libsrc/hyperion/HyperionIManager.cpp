@@ -9,24 +9,28 @@
 
 HyperionIManager* HyperionIManager::HIMinstance;
 
-HyperionIManager::HyperionIManager(const QString& rootPath, QObject* parent, bool readonlyMode)
+HyperionIManager::HyperionIManager(QObject* parent)
 	: QObject(parent)
 	, _log(Logger::getInstance("HYPERION-INSTMGR"))
-	, _instanceTable( new InstanceTable(rootPath, this, readonlyMode) )
-	, _rootPath( rootPath )
-	, _readonlyMode(readonlyMode)
+	, _instanceTable( new InstanceTable())
 {
 	HIMinstance = this;
 	qRegisterMetaType<InstanceState>("InstanceState");
+	_instanceTable->createDefaultInstance();
 }
 
 Hyperion* HyperionIManager::getHyperionInstance(quint8 instance)
 {
+	Hyperion* pInstance {nullptr};
 	if(_runningInstances.contains(instance))
 		return _runningInstances.value(instance);
 
-	Warning(_log,"The requested instance index '%d' with name '%s' isn't running, return main instance", instance, QSTRING_CSTR(_instanceTable->getNamebyIndex(instance)));
-	return _runningInstances.value(0);
+	if (!_runningInstances.isEmpty())
+	{
+		Warning(_log,"The requested instance index '%d' with name '%s' isn't running, return main instance", instance, QSTRING_CSTR(_instanceTable->getNamebyIndex(instance)));
+		pInstance = _runningInstances.value(0);
+	}
+	return pInstance;
 }
 
 QVector<QVariantMap> HyperionIManager::getInstanceData() const
@@ -40,9 +44,32 @@ QVector<QVariantMap> HyperionIManager::getInstanceData() const
 	return instances;
 }
 
+QString HyperionIManager::getInstanceName(quint8 inst)
+{
+	return _instanceTable->getNamebyIndex(inst);
+}
+
+QList<quint8> HyperionIManager::getRunningInstanceIdx() const
+{
+	return _runningInstances.keys();
+}
+
+QList<quint8> HyperionIManager::getInstanceIds() const
+{
+	return _instanceTable->getAllInstanceIDs();
+}
+
+
 void HyperionIManager::startAll()
 {
-	for(const auto & entry : _instanceTable->getAllInstances(true))
+	const QVector<QVariantMap> instances = _instanceTable->getAllInstances(true);
+	if (instances.isEmpty())
+	{
+		Error(_log, "No enabled instances found to be started");
+		return;
+	}
+
+	for(const auto & entry : instances)
 	{
 		startInstance(entry["instance"].toInt());
 	}
@@ -52,19 +79,64 @@ void HyperionIManager::stopAll()
 {
 	// copy the instances due to loop corruption, even with .erase() return next iter
 	QMap<quint8, Hyperion*> instCopy = _runningInstances;
-	for(const auto instance : instCopy)
+	for(auto *const instance : instCopy)
 	{
 		instance->stop();
 	}
 }
 
-void HyperionIManager::toggleStateAllInstances(bool pause)
+void HyperionIManager::handleEvent(Event event)
+{
+	Debug(_log,"%s Event [%d] received", eventToString(event), event);
+	switch (event) {
+	case Event::Suspend:
+		toggleSuspend(true);
+		break;
+
+	case Event::Resume:
+		toggleSuspend(false);
+		break;
+
+	case Event::Idle:
+		toggleIdle(true);
+		break;
+
+	case Event::ResumeIdle:
+		toggleIdle(false);
+		break;
+
+	default:
+		break;
+	}
+}
+
+void HyperionIManager::toggleSuspend(bool isSuspend)
+{
+	Info(_log,"Put all instances in %s state", isSuspend ? "suspend" : "working");
+	QMap<quint8, Hyperion*> instCopy = _runningInstances;
+	for(const auto instance : instCopy)
+	{
+		emit instance->suspendRequest(isSuspend);
+	}
+}
+
+void HyperionIManager::toggleIdle(bool isIdle)
+{
+	Info(_log,"Put all instances in %s state", isIdle ? "idle" : "working");
+	QMap<quint8, Hyperion*> instCopy = _runningInstances;
+	for(const auto instance : instCopy)
+	{
+		emit instance->idleRequest(isIdle);
+	}
+}
+
+void HyperionIManager::toggleStateAllInstances(bool enable)
 {
 	// copy the instances due to loop corruption, even with .erase() return next iter
 	QMap<quint8, Hyperion*> instCopy = _runningInstances;
 	for(const auto instance : instCopy)
 	{
-		emit instance->compStateChangeRequest(hyperion::COMP_ALL, pause);
+		emit instance->compStateChangeRequest(hyperion::COMP_ALL, enable);
 	}
 }
 
@@ -76,7 +148,7 @@ bool HyperionIManager::startInstance(quint8 inst, bool block, QObject* caller, i
 		{
 			QThread* hyperionThread = new QThread();
 			hyperionThread->setObjectName("HyperionThread");
-			Hyperion* hyperion = new Hyperion(inst, _readonlyMode);
+			Hyperion* hyperion = new Hyperion(inst);
 			hyperion->moveToThread(hyperionThread);
 			// setup thread management
 			connect(hyperionThread, &QThread::started, hyperion, &Hyperion::start);
@@ -101,7 +173,7 @@ bool HyperionIManager::startInstance(quint8 inst, bool block, QObject* caller, i
 
 			if(block)
 			{
-				while(!hyperionThread->isRunning()){};
+				while(!hyperionThread->isRunning()){}
 			}
 
 			if (!_pendingRequests.contains(inst) && caller != nullptr)
@@ -148,10 +220,10 @@ bool HyperionIManager::stopInstance(quint8 inst)
 
 bool HyperionIManager::createInstance(const QString& name, bool start)
 {
-	quint8 inst;
+	quint8 inst = 0;
 	if(_instanceTable->createInstance(name, inst))
 	{
-		Info(_log,"New Hyperion instance created with name '%s'",QSTRING_CSTR(name));
+		Info(_log,"New Hyperion instance [%d] created with name '%s'", inst, QSTRING_CSTR(name));
 		emit instanceStateChanged(InstanceState::H_CREATED, inst, name);
 		emit change();
 
@@ -166,7 +238,9 @@ bool HyperionIManager::deleteInstance(quint8 inst)
 {
 	// inst 0 can't be deleted
 	if(!isInstAllowed(inst))
+	{
 		return false;
+	}
 
 	// stop it if required as blocking and wait
 	stopInstance(inst);
@@ -197,7 +271,7 @@ void HyperionIManager::handleFinished()
 	Hyperion* hyperion = qobject_cast<Hyperion*>(sender());
 	quint8 instance = hyperion->getInstanceIndex();
 
-	Info(_log,"Hyperion instance '%s' has been stopped", QSTRING_CSTR(_instanceTable->getNamebyIndex(instance)));
+	Info(_log,"Hyperion instance '%s' stopped", QSTRING_CSTR(_instanceTable->getNamebyIndex(instance)));
 
 	_runningInstances.remove(instance);
 	hyperion->thread()->deleteLater();

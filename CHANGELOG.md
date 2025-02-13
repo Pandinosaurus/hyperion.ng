@@ -4,28 +4,296 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/hyperion-project/hyperion.ng/compare/2.0.12...HEAD)
+## [Unreleased](https://github.com/hyperion-project/hyperion.ng/compare/2.0.16...HEAD)
 
 ### Breaking
 
+**JSON-API**
+- Align JSON subscription update elements. `ledcolors-imagestream-update, ledcolors-ledstream-update, logmsg-update` now return data via `data` and not `result
+- Global global configuration elements are now separated form instance specific ones
+
+### Added
+
+- Support for ftdi chip based LED-devices with ws2812, sk6812 apa102 LED types (Many thanks to @nurikk) (#1746)
+- Support for Skydimo devices
+- Support gaps on Matrix Layout (#1696)
+- Windows: Added a new grabber that uses the DXGI DDA (Desktop Duplication API). This has much better performance than the DX grabber as it does more of its work on the GPU.
+
+- Support to import, export and backup Hyperion's full configuration via the UI, JSON-API and commandline (`--importConfig, --exportConfig`) (#804)
+- Allow to force starting Hyperion in read-only mode (`--readonlyMode`)
+- JSON-API: Support to query for a dedicated set of configuration items for a set of instances
+- JSON-API: Support to save a dedicated set of configuration items for a set of instances
+- JSON-API: Limit update emission frequency: Images (25Hz), raw LED-Colors (40Hz) & LED-Device data (200Hz) 
+- Effects: Limit the maximum update rate to 200Hz
+
+**JSON-API**
+- New subscription support for event updates, i.e. `Suspend, Resume, Idle, idleResume, Restart, Quit`.
+- Support direct or multiple instance addressing via single requests (#809)
+- Support of `serverinfo` subcommands: `getInfo, subscribe, unsubscribe, getSubscriptions, getSubscriptionCommands`
+- [Overview](https://github.com/hyperion-project/hyperion.ng/blob/API_Auth/doc/development/JSON-API%20_Commands_Overview.md) of API commands and subscription updates
+
+### Changed
+
+- Fixed: Cross Site Scripting Vulnerability (CVE-2024-4174, CVE-2024-4175)
+- Fixed: hyperion-v4l2 taking screenshot failed (#1722)
+- Nanoleaf: Support new devices and do not restore ExtControl state
+- Workaround to address Web UI keeps forcing browser to download the html instead (#1692)
+- Fixed: Kodi Color Calibration, Refactor Wizards (#1674)
+- Fixed: Token Dialog not closing
+- Fixed: Philip Hue APIv2 support without Entertainment group defined (#1742)
+- Refactored: Database access layer
+- Refactored: Hyperion's configuration database is validated before start-up (and migrated, if required)
+- Refactored: Python to enable parallel effect processing under Python 3.12
+- Fixed: Python 3.12 crashes (#1747)
+- osX Grabber: Use ScreenCaptureKit under macOS 15 and above
+- Removed maximum LED number constraint from Matrix layout schema which was not synced with the UI behaviour (#1804)
+- Fixed bespoke WebSocket implementation by using of QWebSockets (#1816, #1448, #1247, #1130)
+
+**JSON-API**
+- Refactored JSON-API to ensure consistent authorization behaviour across sessions and single requests with token authorization.
+- Provide additional error details with API responses, esp. on JSON parsing, validation or token errors.
+- Generate random TANs for every API request from the Hyperion UI
+- Fixed: Handling of IP4 addresses wrapped in IPv6 for external network connections-
+- Fixed: Local Admin API Authentication rejects valid tokens (#1251)
+
+### Removed
+
+**JSON-API**
+- Removed ability to enable/disable local admin authorization. All admin commands require authorization, i.e. `authorize-adminRequired` will always be `true`.
+- Removed `session-updates` subscription
+- `serverinfo/subscribe` element will be deprecated and replaced by corresponding subcommand
+
+## [2.0.16](https://github.com/hyperion-project/hyperion.ng/releases/tag/2.0.16) - 2024-01
+
+### Added
+
+- New languages: Hebrew, Indonesian, Ukrainian
+
+**Event Services**
+Newly introduced Event Service configuration and consistent handling across all components
+- Suspend/Resume & Screen Locking support for MaxOS
+- Allow to enable/disable suspend & lock on operating system events (#1633, #1632)
+- Scheduled events allowing to suspend,resume, etc. (#1088)
+- Configurable CEC event handling
+
+##### LED-Devices
+
+**Philips Hue**
+
+- APIv2 support, incl. full https security and certificate validation
+- Multi-Segment device support, e.g. Gradient light
+- Use Entertainment area device location for Hyperion layout in addition to manual locations
+- Option to layout by focussing on full- or only center of entertainment area
+- Wizard supports multiple Hue-Bridge discovery
+- Support of DIYHue specifics. DIYHue bridge's name must start with "DIY"
+- Backward compatibility for bridges not supporting APIv2 and/or Entertainment API
+Note: The wizard will configure an APIv2 capable bridge always with Entertainment to ensure the best experience.
+
+**Nanoleaf**
+- Wizard to generate user authorization token allowing users to configure the device via a single window
+- Generation of a default layout per device's configuration, including orientation
+- Lines support
+
+### Changed
+
+- Updated misleading error messages in case Hyperion is not able to support the suspend/lock feature (#1622)
+- Restart Serial Device, if write error occurred
+- ws281x - Update logic to identify is user is admin and disable device configuration if not (#1621)
+- Hide Hyperion from the Dock on macOS, as all features can be accessed from the menubar - Thanks @Rastafabisch
+
+### Fixed
+- Correctly display local language characters in log, e.g. Umlauts
+- Fixed that Audio Capture is enabled after reboot automatically (#1581)
+- Fixed that Audio Capture is not shown when there is no screen nor video grabber
+- Audio Capture settings are no longer ignored (#1630)
+- Fixed that the Matrix effect finds its image - Thanks @lsellens
+- MDNSBrower - Fixed, if timeout while resolving host occurs
+- Non image updates ignored blacklisted LEDs (#1634)
+- Fixed that Windows OsEvents failed in non-GUI mode (#1671)
+- Addressed serious (#1425) and some smaller memory leaks
+
+##### LED-Devices
+
+**WLED**
+- Fixed UI handling, if segment streaming is not supported
+
+**Nanoleaf**
+- "Panel numbering sequence" was not configurable any longer
+- Number of panels increased during retries (#1643)
+
+### Removed
+
+##### LED-Devices
+
+**Philips Hue**
+- "Switch Off On Black" for APIv2, as the original bridge will switch off LEDs itself.
+- "Candy Gamma" for APIv2, as the bridge maps the RGB values best per device.
+
+**Nanoleaf**
+- Removed "Start Position" in favour of the general Blacklist feature provided
+
+### Technical
+
+- Changed default build from Stretch to Buster
+- Support Qt 6.7, Update to Protobuf 25.1, Update mbedTLS to v3.4.0, Update flatbuffers to v23.5.26
+- Use C++17 standard as default
+- Started using SmartPointers (#981)
+- Added Pull Request (PR) installation script, allowing users to test development builds savely on Linux
+- Fixed missing include limits in QJsonSchemaChecker - Thanks @Portisch
+- Fixed dependencies for deb packages in Debian Bookworm (#1579) - Thanks @hg42, @Psirus
+- Fixed git version identification when run in docker and local code
+- Address cmake deprecation warnings, cmake 3.5 is required at minimum now
+- Address some build warnings
+- Removed UniqueConnections from Lambdas, as not supported
+
+## [2.0.15](https://github.com/hyperion-project/hyperion.ng/releases/tag/2.0.15) - 2023-02
+
+### Added
+
+- Audio Grabber to add audio visualization support for both Windows and Linux.
+- Support streaming to individual WLED segments (requires WLED 0.13.3+).
+To allow segment streaming, enable "Realtime - Use main segment only" in WLED's Sync Interfaces setup screen
+- Allow to keep WLED powered on after streaming and restoring state
+- Allow to Disable / Enable all instances (#970) by
+	- Suspend/Resume support for Linux and Windows (#1493,#1282, #978).
+	Suspend/Resume/Restart is supported via API, UI, Systray and hyperion-remote
+	- Idle scenario via Screen Locking (Linux/Windows), Screensaver invokation (Linux), hyperion-remote or API
+	In Idle, all instances, components will be disabled besides the output processing (LED-Devices, smoothing).
+	The current priorities will be cleared and the background effect per instance will be executed, if enabled.
+	- Commands toogleSuspend and toggleIdle allow to flip between modes, e.g. might be used to trigger modes by a remote
+- Reduced pixel processing to reduce resources on big assignment areas
+- Support for squared mean color processing
+- Support for dominant color processing on assigned LED areas (#1382). A simple and advanced way is provided. Advanced and high accuracy might be combined with reduced pixel processing to lower CPU usage.
+- Add instance# in API response (#1504)
+
+### Changed
+
+- REST API - Increased default timeout to address "Operation cancelled" errors
+- LED Devices: Allow to differentiate between recoverable/unrecoverable errors
+- Renamed LED area assignment naming to provide clarity on the processing algorithms
+- Updated SEDU default baud rates
+
+### Fixed
+
+- Effects/Smoothing:  Effects with dedicated smoothing settings will now run with those settings (even if general smoothing is off)
+- No interim color update after streaming and turning off WLED
+- LED-Matrix Layout: Add Cabling direction selection element again (#1566)
+- Restart correctly, if running as service (#1368)
+- Hue-Wizard: In case auto discovery failed, port 80 was not used as default (#1544)
+- Send only one reply per Start Instance request (#1551)
+- Add instance# in JSON-API replies (aligning to Add instance in websocket response to a subscription #1504 behaviour)
+- hyperion-remote: Extracting reply for a configGet request correctly (#1555)
+- Grabber fps setting was not applied correctly
+- Smoothing:  No empty updates
+
+### Technical
+- Add CodeQL for GitHub code scanning
+- Update to Protocol Buffers 3.21.12
+- Update to Mbed TLS 3.3.0
+- Qt6 alignments
+- cmake support of libcec without version in lib-name
+- Refactor for Python 3.11 deprecated functions
+
+## Removed
+
+## [2.0.14](https://github.com/hyperion-project/hyperion.ng/releases/tag/2.0.14) - 2022-11
+
+Hyperion's November release is not too big, but provides you with the latest updates and fixes. Many thanks to all contributors providing code (xkns, drzony) or translations.
+
+### Added
+
+- New color processing settings: Saturation gain and brightness/value gain. They allow compensating washed out HDR colors on LEDs (#822, #1092, #1142 partially).
+- New languages: Catalan & Greek
+- USB Capture: Support 3D processing for MJPEG
+- Forwarding: Support flat-/proto buffer input
+- Adalight: HyperSerial support (High speed protocol by awawa-dev) and support device feedback, show statistics provided by HyperSerial (modified by LordGrey) sketch
+- AtmoOrb: Firmware image for Particle/Photon
+
+### Changed
+
+- Serial LED-devices: Ability to select standard Baud rates, as well as defining a custom one
+- LED-devices: Do not switch-off device, if background effect is configured and will kick-in soon
+
+### Fixed
+
+- USB-Grabber: Fixed a SEGFAULT when compiled on Ubuntu Server 22.04
+- USB Grabber: Fixed memory leak when transforming MJPEG
+- ImageResampler: Apply only half crop for 3D to maintain crop ratio
+- Remote Control: Update Color calibration values when calibration settings were saved
+- Fixed Smoothing got out of sync when saving configuration
+- Smoothing: Removed "outputrate" as duplicate to update frequency
+- Queue LED-device on/off signals
+- UI: Correctly lookup current Instance Name
+- Fixed AtmoOrb firmware image
+
+## [2.0.13](https://github.com/hyperion-project/hyperion.ng/releases/tag/2.0.13) - 2022-05-22
 ### Added
 
 - Allow to build a "light" version of Hyperion, i.e. no grabbers, or services like flat-/proto buffers, boblight, CEC
 - Allow to restart Hyperion via Systray
+- mDNS support for all platforms inkl. Windows (#740)
+- Forwarder: mDNS discovery support and ease of configuration of other Hyperion instances
+- Grabber: mDNS discovery for standalone grabbers
+- Grabber: Dynamic loading of the Dispmanx Grabber (#1418)
+- Flatbuffer/Protobuf are now able to receive RGBA data
+- Added the instance number as part of the logline (#910). In the UI Log the instance is presented as a readable name.
+- New language: Japanese
+
+##### LED-Devices
+- Support retry attempts enabling devices, e.g. to open devices after network or a device itself got available (#1302). Fixes that devices got "stuck", if initial open failed e.g. for WLED, Hue
+- New UDP-DDP (Distributed Display Protocol) device to overcome the 490 LEDs limitation of UDP-RAW
+- mDNS discovery support and ease of configuration (Cololight, Nanoleaf, Philips-Hue, WLED, Yeelight); removes the need to configure IP-Address, as address is resolved automatically.
+- Allow to disable switching LEDs on during startup (#1390)
+- Support additional Yeelight models
+- Show warning, if get properties failed (Network devices: indication that network device is not reachable)
+- LED Layout Classic: Support keystone correction via draggable corner LEDs
+- LED Layout Matrix: Support vertical cabling direction (#1420)
 
 ### Changed
 
-- Colors Smoothing is started in pause mode to save resources, when Hyperion starts with no active source
+- Color Smoothing is started in pause mode to save resources, when Hyperion starts with no active source
+- Boblight: Support multiple Boblight clients with different priorities
+- UI: LED Preview has been given a touch of Ambilight.
+- UI: Allow configuration of a Boblight server per LED-instance
+- UI: LED Layout - Removed limitations on indention
+- UI: Log output and LED preview window can be maximized
+- mDNS Publisher: Aligned Hyperion mDNS names to general conventions and simplified naming
+
+##### LED-Devices
+- Refactored Philips Hue wizard and LED-Device
+- WLED's default streaming protocol is now UDP-DDP. More than 490 LEDs are supported now (requires minimum WLED 0.11.0). UDP-RAW is still supported in parallel (via expert settings).
+- Present all serial/TTY devices during discovery in expert mode; no filtering on existing vendor-identifier (Adalight serial USB does not show up in GUI #1458)
 
 ### Fixed
 
+- UI: Ensure all configuration and system info response are there before reloading the page (#1430)
+- UI: Show all previous log lines in the Log UI (was only working for Debug before)
+- UI: Remote control: Treat duration=0 as endless
+- UI: Stop Web-Browser capture when user triggers other activities
 - Effects: Fix image URL in Matrix effect
-- Fixes that the Led-Device output flow was interrupted, by an enabling API request on an already enabled device (#967
-- Yeelight - Workaround: Ignore error when setting music mode = off, but the music-mode is already off (#1372)
+- Effects: Fix that start effect is stuck on UI
+- Effects: Fixed that effect specific smoothing setup was not applied when effect is started from available- or effects under configuration
+- Qt-Grabber: Fixed position handling of multiple monitors (#1320, #1403)
 - Standalone grabbers: Improved fps help/error text, fixed default address and port, fixed auto discovery of Hyperion server in hyperion-remote
+- hyperion-remote: Show image filename in UI for images sent
+- Reworked PriorityMuxer and Subscriptions
+- PriorityMuxer: Fix crash when running fore- and background effect in parallel during start-up
+- Update Priority, if first LED changes for COLOR update (to reflect color correctly in UI)
+- Start JSON and WebServer only,  if Hyperion's instance 0 is available
+- Treat http headers case insensitive (RFC 2616)
+- Fixed: Signal detection does not switch off all instances (#1281)
+- Do not kill application on SIGILL-signal (#1435)
 - Fixed Qt version override, e.g. set via QTDIR
+- Update jsonschema and checkschema to allow checking hyperion.config.json.default on Windows
+
+##### LED-Devices
+- Fixes that the Led-Device output flow was interrupted, by an enabling API request on an already enabled device (#967)
+- Yeelight - Workaround: Ignore error when setting music mode = off, but the music-mode is already off (#1372)
+- Fixed: Hue Entertainment mode does not resume after no signal (#930)
 
 ## Removed
+- UI: Removed sessions (of other Hyperions)
+- Replaced existing AVAHI/Bonjour code by QMdnsEngine
 
 ## [2.0.12](https://github.com/hyperion-project/hyperion.ng/releases/tag/2.0.12) - 2021-11-20
 Hyperion's November release brings you some new features, removed IPv6 address related limitations, as well as fixing a couple of issues.
@@ -58,7 +326,7 @@ Note: Existing configurations are migrated to new structures automatically
 - Fixed hyperion-remote when sending multiple Hex-Colors with "Set Color" option
 - UI: Fixed "Selected Hyperion instance isn't running" issue (#1357)
 - Fixed Database migration version handling
-- Fixed Python ModuleNotFoundError (#1109) 
+- Fixed Python ModuleNotFoundError (#1109)
 
 ### Technical
 
@@ -77,7 +345,7 @@ We did not weaken security, but provide you with an easy to use script to switch
 ### Added:
 - Script to change the user Hyperion is executed with.
 To run Hyperion with root privileges (e.g. for WS281x) execute <br> `sudo updateHyperionUser -u root`
-- Gif effects can source Gifs via URLs in addition to local files as input 
+- Gif effects can source Gifs via URLs in addition to local files as input
 
 - System info screen: Added used config path and "is run under root/admin"
 - LED-Device enhancements
@@ -109,7 +377,7 @@ To run Hyperion with root privileges (e.g. for WS281x) execute <br> `sudo update
 - Escape XSS payload to avoid execution (#1292)
 - Include libqt5sql5-sqlite packaging dependency
 - Fixed embedded Python location (#1109)
- 
+
 - LED-Devices
   - Fixed Philips Hue wizard (#1276)
   - Fixed AtmoOrb wizard
@@ -135,12 +403,12 @@ The refined color coding in the user-interfaces, helps you to quickly identify i
 
 Of course, the release brings new features (e.g. USB Capture on Windows), as well as minor enhancements and a good number of fixes.
 
-Note: 
+Note:
 
 - **IMPORTANT:** Due to the rework of the grabbers, both screen- and video grabbers are disabled after the upgrade to the new version.
 Please, re-enable the grabber of choice via the UI, validate the configuration and save the setup. The grabber should the restart.
 
-- Hyperion packages can now be installed under Ubuntu (x64) and Debian (amd64/armhf) (incl. Raspberry Pi OS) via our own APT server. 
+- Hyperion packages can now be installed under Ubuntu (x64) and Debian (amd64/armhf) (incl. Raspberry Pi OS) via our own APT server.
 Details about the installation can be found in the [installation.md](https://github.com/hyperion-project/hyperion.ng/blob/master/Installation.md) and at [apt.hyperion-project.org](apt.hyperion-project.org).
 - Find here more details on [supported platforms and configuration sets](https://github.com/hyperion-project/hyperion.ng/blob/master/doc/development/SupportedPlatforms.md)
 
